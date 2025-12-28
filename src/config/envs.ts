@@ -13,14 +13,16 @@ export const envs = {
   X_TOKEN_API: get('X_TOKEN_API').default('').asString(), // Opcional - para reset password
 
   // PostgreSQL
-  PG_HOST: get('PG_HOST').required().asString(),
-  PG_PORT: get('PG_PORT').required().asPortNumber(),
-  PG_USER: get('PG_USER').required().asString(),
-  PG_PASSWORD: get('PG_PASSWORD').required().asString(),
-  PG_DB: get('PG_DB').required().asString(),
-  TABLE_VECTOR: get('TABLE_VECTOR').required().asString(),
-  COL_TEXT: get('COL_TEXT').required().asString(),
-  COL_SOURCE: get('COL_SOURCE').required().asString(),
+  // Railway provee DATABASE_URL, estas variables son opcionales si DATABASE_URL existe
+  DATABASE_URL: get('DATABASE_URL').asString(),
+  PG_HOST: get('PG_HOST').default('').asString(),
+  PG_PORT: get('PG_PORT').default(5432).asPortNumber(),
+  PG_USER: get('PG_USER').default('').asString(),
+  PG_PASSWORD: get('PG_PASSWORD').default('').asString(),
+  PG_DB: get('PG_DB').default('').asString(),
+  TABLE_VECTOR: get('TABLE_VECTOR').default('document_vectors').asString(),
+  COL_TEXT: get('COL_TEXT').default('text').asString(),
+  COL_SOURCE: get('COL_SOURCE').default('source').asString(),
 
   // OpenAI (LLM & Embeddings)
   OPENAI_API_KEY: get('OPENAI_API_KEY').required().asString(),
