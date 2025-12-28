@@ -1,0 +1,17 @@
+[phases.setup]
+nixPkgs = ["nodejs_18", "npm-9_x"]
+
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+cmds = ["npm run railway:build"]
+
+# NO ejecutar migraciones durante el build
+# Las migraciones se ejecutan en railway:start cuando DATABASE_URL está disponible
+[phases.release]
+cmds = []
+
+[start]
+cmd = "npm run railway:start"
+
