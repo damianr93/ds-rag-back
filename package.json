@@ -10,7 +10,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
-    "railway:build": "npm install && npx prisma generate && npm run build",
+    "railway:build": "rm -rf node_modules && npm install && npx prisma generate && npm run build",
     "railway:start": "node scripts/start-railway.js",
     "make-admin": "ts-node src/scripts/make-admin.ts",
     "generate-keys": "node generate-keys.js"
