@@ -1,0 +1,17 @@
+[phases.setup]
+nixPkgs = ["nodejs_18", "npm-9_x"]
+
+[phases.install]
+cmds = ["npm ci --omit=dev"]
+
+[phases.build]
+cmds = ["npx prisma generate", "npm run build"]
+
+# NO ejecutar migraciones durante el build/release
+# Las migraciones se ejecutan en el start cuando DATABASE_URL está disponible
+[phases.release]
+cmds = []
+
+[start]
+cmd = "node scripts/start-railway.js"
+
