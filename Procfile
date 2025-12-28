@@ -1,0 +1,3 @@
+release: npx prisma migrate deploy
+web: node dist/app.js
+

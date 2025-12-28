@@ -1,0 +1,23 @@
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: ia-postgres-ds
+    restart: unless-stopped
+    ports:
+      - "${PG_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: ${PG_DB:-iad_db}
+      POSTGRES_USER: ${PG_USER:-postgres}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-postgres}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-postgres} -d ${PG_DB:-iad_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/initdb:/docker-entrypoint-initdb.d
+
+volumes:
+  postgres_data:

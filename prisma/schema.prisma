@@ -1,0 +1,121 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                Int      @id @default(autoincrement())
+  email             String   @unique
+  name              String?
+  lastName          String?
+  division          String?
+  password          String
+  role              String   @default("USER")
+  disclaimerChecked Boolean  @default(false)
+  isActive          Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  conversations     Conversation[]
+  documentSources   DocumentSource[]
+
+  @@map("users")
+}
+
+model DocumentVector {
+  id          Int      @id @default(autoincrement())
+  text        String
+  embedding   Unsupported("vector(1536)")
+  source      String
+  chunkIndex  Int      @map("chunk_index")
+  totalChunks Int      @map("total_chunks")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("document_vectors")
+}
+
+model Conversation {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  title     String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  user     User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages ConversationMessage[]
+
+  @@map("conversations")
+}
+
+model ConversationMessage {
+  id             Int      @id @default(autoincrement())
+  conversationId Int
+  role           String
+  content        String
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@map("conversation_messages")
+}
+
+model ProcessedFile {
+  id           Int      @id @default(autoincrement())
+  filename     String   @unique
+  fileHash     String
+  chunksCount  Int
+  processedAt  DateTime @default(now())
+
+  @@map("processed_files")
+}
+
+model DocumentSource {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  name         String
+  provider     String   // 'google_drive', 'dropbox', 'onedrive', 'local'
+  credentials  String   // JSON encriptado con tokens/keys
+  clientId     String?  // OAuth Client ID (encriptado)
+  clientSecret String?  // OAuth Client Secret (encriptado)
+  rootFolderId String?  // ID de la carpeta raíz en el proveedor
+  isActive     Boolean  @default(true)
+  lastError    String?  // Último error al intentar acceder a la fuente
+  lastSyncAt   DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trackedFiles TrackedFile[]
+
+  @@index([userId])
+  @@map("document_sources")
+}
+
+model TrackedFile {
+  id               Int      @id @default(autoincrement())
+  sourceId         Int
+  fileId           String   // ID del archivo en el proveedor (Google Drive, etc)
+  fileName         String
+  filePath         String   // Path completo del archivo
+  fileHash         String?  // Hash MD5 o similar para detectar cambios
+  lastModified     DateTime // Fecha de última modificación del archivo
+  lastProcessedAt  DateTime? // Última vez que fue procesado por RAG
+  isFolder         Boolean  @default(false)
+  includeChildren  Boolean  @default(true) // Si es carpeta, incluir subcarpetas
+  status           String   @default("pending") // pending, processing, completed, error
+  errorMessage     String?
+  chunksCount      Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  source DocumentSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceId, fileId])
+  @@index([sourceId])
+  @@index([status])
+  @@map("tracked_files")
+}
