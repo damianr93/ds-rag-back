@@ -5,13 +5,13 @@
   "main": "dist/app.js",
   "scripts": {
     "dev": "tsnd --respawn --clear src/app.ts",
-    "build": "rimraf ./dist && tsc",
+    "build": "rm -rf dist && tsc",
     "start": "node dist/app.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "railway:build": "npm install --omit=dev && npx prisma generate && npm run build",
-    "railway:start": "bash scripts/start.sh",
+    "railway:start": "npx prisma migrate deploy && npm run start",
     "make-admin": "ts-node src/scripts/make-admin.ts",
     "generate-keys": "node generate-keys.js"
   },
