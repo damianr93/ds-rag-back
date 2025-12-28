@@ -1,3 +1,6 @@
+-- Enable pgvector extension
+CREATE EXTENSION IF NOT EXISTS vector;
+
 -- CreateTable
 CREATE TABLE "users" (
     "id" SERIAL NOT NULL,
@@ -19,7 +22,7 @@ CREATE TABLE "users" (
 CREATE TABLE "document_vectors" (
     "id" SERIAL NOT NULL,
     "text" TEXT NOT NULL,
-    "embedding" vector(768) NOT NULL,
+    "embedding" vector(1536) NOT NULL,
     "source" TEXT NOT NULL,
     "chunk_index" INTEGER NOT NULL,
     "total_chunks" INTEGER NOT NULL,
