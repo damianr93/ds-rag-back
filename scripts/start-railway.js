@@ -73,6 +73,68 @@ async function ensureDocumentSourceColumns() {
   }
 }
 
+// Crear tabla tracked_files si no existe
+async function ensureTrackedFilesTable() {
+  const prisma = new PrismaClient();
+  try {
+    console.log('🔧 Verificando tabla tracked_files...');
+    
+    // Verificar si la tabla existe
+    const result = await prisma.$queryRawUnsafe(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'tracked_files'
+      ) as exists;
+    `);
+    
+    const tableExists = result[0]?.exists || false;
+    
+    if (!tableExists) {
+      console.log('📦 Creando tabla tracked_files...');
+      
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE "tracked_files" (
+          "id" SERIAL NOT NULL,
+          "sourceId" INTEGER NOT NULL,
+          "fileId" TEXT NOT NULL,
+          "fileName" TEXT NOT NULL,
+          "filePath" TEXT NOT NULL,
+          "fileHash" TEXT,
+          "lastModified" TIMESTAMP(3) NOT NULL,
+          "lastProcessedAt" TIMESTAMP(3),
+          "isFolder" BOOLEAN NOT NULL DEFAULT false,
+          "includeChildren" BOOLEAN NOT NULL DEFAULT true,
+          "status" TEXT NOT NULL DEFAULT 'pending',
+          "errorMessage" TEXT,
+          "chunksCount" INTEGER NOT NULL DEFAULT 0,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL,
+
+          CONSTRAINT "tracked_files_pkey" PRIMARY KEY ("id")
+        );
+
+        CREATE UNIQUE INDEX "tracked_files_sourceId_fileId_key" ON "tracked_files"("sourceId", "fileId");
+        CREATE INDEX "tracked_files_sourceId_idx" ON "tracked_files"("sourceId");
+        CREATE INDEX "tracked_files_status_idx" ON "tracked_files"("status");
+
+        ALTER TABLE "tracked_files" ADD CONSTRAINT "tracked_files_sourceId_fkey" 
+          FOREIGN KEY ("sourceId") REFERENCES "document_sources"("id") 
+          ON DELETE CASCADE ON UPDATE CASCADE;
+      `);
+      
+      console.log('✅ Tabla tracked_files creada');
+    } else {
+      console.log('✅ Tabla tracked_files ya existe');
+    }
+  } catch (error) {
+    console.error('❌ Error al verificar tabla tracked_files:', error.message);
+    // No lanzar error, solo loguear
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
 // Resolver migraciones fallidas si existen
 function resolveFailedMigration() {
   try {
@@ -107,7 +169,10 @@ async function start() {
     // 2. Agregar columnas faltantes si no existen
     await ensureDocumentSourceColumns();
     
-    // 3. Intentar ejecutar migraciones
+    // 3. Crear tabla tracked_files si no existe
+    await ensureTrackedFilesTable();
+    
+    // 4. Intentar ejecutar migraciones
     if (!runMigrations()) {
       console.log('⚠️  Error en migraciones, intentando resolver...');
       
@@ -121,7 +186,7 @@ async function start() {
       }
     }
     
-    // 4. Iniciar servidor
+    // 5. Iniciar servidor
     console.log('🌐 Iniciando servidor...');
     execSync('npm run start', { stdio: 'inherit' });
   } catch (error) {
