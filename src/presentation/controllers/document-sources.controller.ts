@@ -21,8 +21,6 @@ export class DocumentSourcesController {
         return;
       }
       
-      console.log('📥 Request body:', JSON.stringify(req.body, null, 2));
-      
       const dto: CreateDocumentSourceDto = req.body;
       
       // Validación básica

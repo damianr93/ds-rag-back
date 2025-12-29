@@ -43,11 +43,6 @@ export class Server {
       })
     );
 
-    // Log de requests para debug
-    this.app.use((req, res, next) => {
-      console.log(`${req.method} ${req.path} - Origin: ${req.headers.origin || 'none'}`);
-      next();
-    });
 
     //* Public Folder
     this.app.use(express.static(this.publicPath));

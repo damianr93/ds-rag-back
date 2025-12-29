@@ -198,21 +198,9 @@ export class RagSyncService {
     };
     this.logs.push(log);
     
-    // También loguear en consola para debugging
-    const prefix = `[RAG SYNC]`;
-    switch (level) {
-      case 'info':
-        console.log(`${prefix} ${message}`);
-        break;
-      case 'success':
-        console.log(`${prefix} ✓ ${message}`);
-        break;
-      case 'warning':
-        console.warn(`${prefix} ⚠ ${message}`);
-        break;
-      case 'error':
-        console.error(`${prefix} ✗ ${message}`);
-        break;
+    // Solo loguear errores en consola
+    if (level === 'error') {
+      console.error(`[RAG SYNC] ${message}`);
     }
   }
 
