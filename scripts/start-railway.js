@@ -93,6 +93,7 @@ async function ensureTrackedFilesTable() {
     if (!tableExists) {
       console.log('📦 Creando tabla tracked_files...');
       
+      // Crear tabla (un comando a la vez)
       await prisma.$executeRawUnsafe(`
         CREATE TABLE "tracked_files" (
           "id" SERIAL NOT NULL,
@@ -110,17 +111,40 @@ async function ensureTrackedFilesTable() {
           "chunksCount" INTEGER NOT NULL DEFAULT 0,
           "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
           "updatedAt" TIMESTAMP(3) NOT NULL,
-
           CONSTRAINT "tracked_files_pkey" PRIMARY KEY ("id")
-        );
-
-        CREATE UNIQUE INDEX "tracked_files_sourceId_fileId_key" ON "tracked_files"("sourceId", "fileId");
-        CREATE INDEX "tracked_files_sourceId_idx" ON "tracked_files"("sourceId");
-        CREATE INDEX "tracked_files_status_idx" ON "tracked_files"("status");
-
-        ALTER TABLE "tracked_files" ADD CONSTRAINT "tracked_files_sourceId_fkey" 
-          FOREIGN KEY ("sourceId") REFERENCES "document_sources"("id") 
-          ON DELETE CASCADE ON UPDATE CASCADE;
+        )
+      `);
+      
+      // Crear índices (uno por uno)
+      await prisma.$executeRawUnsafe(`
+        CREATE UNIQUE INDEX IF NOT EXISTS "tracked_files_sourceId_fileId_key" 
+        ON "tracked_files"("sourceId", "fileId")
+      `);
+      
+      await prisma.$executeRawUnsafe(`
+        CREATE INDEX IF NOT EXISTS "tracked_files_sourceId_idx" 
+        ON "tracked_files"("sourceId")
+      `);
+      
+      await prisma.$executeRawUnsafe(`
+        CREATE INDEX IF NOT EXISTS "tracked_files_status_idx" 
+        ON "tracked_files"("status")
+      `);
+      
+      // Agregar foreign key usando DO block
+      await prisma.$executeRawUnsafe(`
+        DO $$ 
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint 
+            WHERE conname = 'tracked_files_sourceId_fkey'
+          ) THEN
+            ALTER TABLE "tracked_files" 
+              ADD CONSTRAINT "tracked_files_sourceId_fkey" 
+              FOREIGN KEY ("sourceId") REFERENCES "document_sources"("id") 
+              ON DELETE CASCADE ON UPDATE CASCADE;
+          END IF;
+        END $$;
       `);
       
       console.log('✅ Tabla tracked_files creada');
