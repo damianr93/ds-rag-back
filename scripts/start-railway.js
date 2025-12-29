@@ -25,6 +25,54 @@ async function ensureVectorExtension() {
   }
 }
 
+// Agregar columnas faltantes en document_sources si no existen
+async function ensureDocumentSourceColumns() {
+  const prisma = new PrismaClient();
+  try {
+    console.log('🔧 Verificando columnas en document_sources...');
+    
+    // Verificar y agregar columnas faltantes
+    await prisma.$executeRawUnsafe(`
+      DO $$ 
+      BEGIN
+        -- Agregar clientId si no existe
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'document_sources' AND column_name = 'clientId'
+        ) THEN
+          ALTER TABLE "document_sources" ADD COLUMN "clientId" TEXT;
+          RAISE NOTICE 'Columna clientId agregada';
+        END IF;
+        
+        -- Agregar clientSecret si no existe
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'document_sources' AND column_name = 'clientSecret'
+        ) THEN
+          ALTER TABLE "document_sources" ADD COLUMN "clientSecret" TEXT;
+          RAISE NOTICE 'Columna clientSecret agregada';
+        END IF;
+        
+        -- Agregar lastError si no existe
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'document_sources' AND column_name = 'lastError'
+        ) THEN
+          ALTER TABLE "document_sources" ADD COLUMN "lastError" TEXT;
+          RAISE NOTICE 'Columna lastError agregada';
+        END IF;
+      END $$;
+    `);
+    
+    console.log('✅ Columnas en document_sources verificadas');
+  } catch (error) {
+    console.error('❌ Error al verificar columnas:', error.message);
+    // No lanzar error, solo loguear - las migraciones pueden manejarlo
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
 // Resolver migraciones fallidas si existen
 function resolveFailedMigration() {
   try {
@@ -56,7 +104,10 @@ async function start() {
     // 1. Crear extensión pgvector
     await ensureVectorExtension();
     
-    // 2. Intentar ejecutar migraciones
+    // 2. Agregar columnas faltantes si no existen
+    await ensureDocumentSourceColumns();
+    
+    // 3. Intentar ejecutar migraciones
     if (!runMigrations()) {
       console.log('⚠️  Error en migraciones, intentando resolver...');
       
@@ -70,7 +121,7 @@ async function start() {
       }
     }
     
-    // 3. Iniciar servidor
+    // 4. Iniciar servidor
     console.log('🌐 Iniciando servidor...');
     execSync('npm run start', { stdio: 'inherit' });
   } catch (error) {
