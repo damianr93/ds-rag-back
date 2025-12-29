@@ -32,13 +32,22 @@ export class Server {
         limits: { fileSize: 50 * 1024 * 1024 },
       })
     );
+    // CORS configuration - permite todas las conexiones
     this.app.use(
       cors({
-        origin: '*',
-        methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        allowedHeaders: ["Content-Type", "Authorization"],
+        origin: true, // Permite cualquier origen
+        credentials: true, // Permite cookies/credenciales
+        methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+        allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+        exposedHeaders: ["Content-Type", "Authorization"],
       })
     );
+
+    // Log de requests para debug
+    this.app.use((req, res, next) => {
+      console.log(`${req.method} ${req.path} - Origin: ${req.headers.origin || 'none'}`);
+      next();
+    });
 
     //* Public Folder
     this.app.use(express.static(this.publicPath));

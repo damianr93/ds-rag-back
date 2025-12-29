@@ -14,6 +14,15 @@ export class AppRoutes {
     const router = Router();
     const container = Container.getInstance();
     
+    // Health check endpoint
+    router.get('/api/health', (req, res) => {
+      res.json({ 
+        status: 'ok', 
+        timestamp: new Date().toISOString(),
+        message: 'Backend is running'
+      });
+    });
+    
     // Rutas principales
     router.use('/api/auth', AuthRoutes.routes);
     router.use('/api/AI', RAGRoutes.routes);
