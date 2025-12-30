@@ -14,6 +14,8 @@ export interface DocumentVectorRepository {
   countAll(): Promise<number>;
 
   clearAll(): Promise<void>;
+
+  deleteBySource(source: string): Promise<number>;
 }
 
 export interface ConversationRepository {
@@ -42,5 +44,9 @@ export interface ProcessedFileRepository {
   listFiles(): Promise<{ filename: string; chunks_count: number; processed_at: Date }[]>;
 
   clearAll(): Promise<void>;
+
+  deleteByFilename(filename: string): Promise<void>;
+
+  findByFilenamePattern(pattern: string): Promise<{ filename: string; fileHash: string; chunksCount: number; processedAt: Date }[]>;
 }
 

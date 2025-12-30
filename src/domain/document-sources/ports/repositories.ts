@@ -5,6 +5,7 @@ export interface DocumentSourceRepository {
   findById(id: number): Promise<DocumentSourceEntity | null>;
   findByUserId(userId: number): Promise<DocumentSourceEntity[]>;
   findAll(): Promise<DocumentSourceEntity[]>;
+  findAllActive(): Promise<DocumentSourceEntity[]>;
   update(id: number, data: Partial<DocumentSourceEntity>): Promise<DocumentSourceEntity>;
   delete(id: number): Promise<void>;
   updateLastSync(id: number): Promise<void>;

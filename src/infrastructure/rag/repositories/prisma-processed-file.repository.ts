@@ -51,4 +51,41 @@ export class PrismaProcessedFileRepository implements ProcessedFileRepository {
   async clearAll(): Promise<void> {
     await prisma.processedFile.deleteMany();
   }
+
+  async deleteByFilename(filename: string): Promise<void> {
+    await prisma.processedFile.deleteMany({
+      where: { filename }
+    });
+  }
+
+  async findByFilenamePattern(pattern: string): Promise<{ filename: string; fileHash: string; chunksCount: number; processedAt: Date }[]> {
+    const exactMatch = await prisma.processedFile.findMany({
+      where: { filename: pattern }
+    });
+
+    if (exactMatch.length > 0) {
+      return exactMatch.map(file => ({
+        filename: file.filename,
+        fileHash: file.fileHash,
+        chunksCount: file.chunksCount,
+        processedAt: file.processedAt
+      }));
+    }
+
+    const patternMatch = await prisma.processedFile.findMany({
+      where: {
+        filename: {
+          startsWith: pattern,
+          mode: 'insensitive'
+        }
+      }
+    });
+
+    return patternMatch.map(file => ({
+      filename: file.filename,
+      fileHash: file.fileHash,
+      chunksCount: file.chunksCount,
+      processedAt: file.processedAt
+    }));
+  }
 }

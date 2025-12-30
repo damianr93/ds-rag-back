@@ -127,33 +127,10 @@ export class Container {
         new DocumentSourcesController(c.resolve<DocumentSourcesApplication>('DocumentSourcesApplication'))
       );
 
-      // Tracked Files
-      this.register<PrismaTrackedFileRepository>('TrackedFileRepository', () => new PrismaTrackedFileRepository(prisma));
-      this.register<TrackedFilesApplication>('TrackedFilesApplication', (c) =>
-        new TrackedFilesApplication(
-          c.resolve<PrismaTrackedFileRepository>('TrackedFileRepository'),
-          c.resolve<PrismaDocumentSourceRepository>('DocumentSourceRepository')
-        )
-      );
-      this.register<RagSyncService>('RagSyncService', (c) =>
-        new RagSyncService(
-          c.resolve<PrismaTrackedFileRepository>('TrackedFileRepository'),
-          c.resolve<PrismaDocumentSourceRepository>('DocumentSourceRepository'),
-          c.resolve<DocumentSourcesApplication>('DocumentSourcesApplication'),
-          c.resolve<RAGApplication>('RagApplication')
-        )
-      );
-      this.register<TrackedFilesController>('TrackedFilesController', (c) =>
-        new TrackedFilesController(
-          c.resolve<TrackedFilesApplication>('TrackedFilesApplication'),
-          c.resolve<RagSyncService>('RagSyncService')
-        )
-      );
-
       // OAuth
       this.register<OAuthController>('OAuthController', () => new OAuthController());
 
-      // RAG
+      // RAG - Registrar repositorios primero
       this.register<PrismaConversationRepository>('ConversationRepository', () => new PrismaConversationRepository());
       this.register<PostgresDocumentVectorRepository>('DocumentVectorRepository', () => new PostgresDocumentVectorRepository());
       this.register<PrismaProcessedFileRepository>('ProcessedFileRepository', () => new PrismaProcessedFileRepository());
@@ -177,6 +154,31 @@ export class Container {
       
       this.register<RAGService>('RAGService', (c) => new RAGService(c.resolve<RAGApplication>('RagApplication'), () => closePool()));
       this.register<RAGController>('RAGController', (c) => new RAGController(c.resolve<RAGService>('RAGService')));
+
+      // Tracked Files - Después de RAG para tener acceso a los repositorios
+      this.register<PrismaTrackedFileRepository>('TrackedFileRepository', () => new PrismaTrackedFileRepository(prisma));
+      this.register<TrackedFilesApplication>('TrackedFilesApplication', (c) =>
+        new TrackedFilesApplication(
+          c.resolve<PrismaTrackedFileRepository>('TrackedFileRepository'),
+          c.resolve<PrismaDocumentSourceRepository>('DocumentSourceRepository'),
+          c.resolve<PostgresDocumentVectorRepository>('DocumentVectorRepository'),
+          c.resolve<PrismaProcessedFileRepository>('ProcessedFileRepository')
+        )
+      );
+      this.register<RagSyncService>('RagSyncService', (c) =>
+        new RagSyncService(
+          c.resolve<PrismaTrackedFileRepository>('TrackedFileRepository'),
+          c.resolve<PrismaDocumentSourceRepository>('DocumentSourceRepository'),
+          c.resolve<DocumentSourcesApplication>('DocumentSourcesApplication'),
+          c.resolve<RAGApplication>('RagApplication')
+        )
+      );
+      this.register<TrackedFilesController>('TrackedFilesController', (c) =>
+        new TrackedFilesController(
+          c.resolve<TrackedFilesApplication>('TrackedFilesApplication'),
+          c.resolve<RagSyncService>('RagSyncService')
+        )
+      );
 
       // Configure middleware
       AuthMiddleware.configure(this.resolve<TokenService>('TokenService'));

@@ -75,13 +75,14 @@ export class TrackedFilesController {
   getTrackedFilesMap = async (req: Request, res: Response): Promise<void> => {
     try {
       const userId = (req as AuthenticatedRequest).user?.id;
+      const userRole = (req as AuthenticatedRequest).user?.role;
       if (!userId) {
         res.status(401).json({ error: 'Unauthorized' });
         return;
       }
 
       const { sourceId } = req.params;
-      const map = await this.application.getTrackedFilesMap(Number(sourceId), userId);
+      const map = await this.application.getTrackedFilesMap(Number(sourceId), userId, userRole);
       
       // Convertir Map a objeto para JSON
       const obj: Record<string, any> = {};
@@ -140,6 +141,25 @@ export class TrackedFilesController {
       console.error('Error getting sync status:', error);
       res.status(500).json({ 
         error: error instanceof Error ? error.message : 'Error al obtener estado de sincronización'
+      });
+    }
+  };
+
+  unragFile = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = (req as AuthenticatedRequest).user?.id;
+      if (!userId) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
+      }
+
+      const { sourceId, fileId } = req.params;
+      await this.application.unragFile(Number(sourceId), fileId, userId);
+      res.status(200).json({ message: 'Archivo des-rageado exitosamente' });
+    } catch (error) {
+      console.error('Error unragging file:', error);
+      res.status(500).json({ 
+        error: error instanceof Error ? error.message : 'Error al des-ragear archivo'
       });
     }
   };

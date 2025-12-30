@@ -65,6 +65,15 @@ export class PrismaDocumentSourceRepository implements DocumentSourceRepository 
     } as any));
   }
 
+  async findAllActive(): Promise<DocumentSourceEntity[]> {
+    const sources = await this.prisma.documentSource.findMany({
+      where: { isActive: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return sources.map(this.mapToEntity);
+  }
+
   async update(id: number, data: Partial<DocumentSourceEntity>): Promise<DocumentSourceEntity> {
     const source = await this.prisma.documentSource.update({
       where: { id },

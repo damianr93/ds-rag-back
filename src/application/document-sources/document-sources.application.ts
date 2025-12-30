@@ -57,15 +57,33 @@ export class DocumentSourcesApplication {
     }
   }
 
-  async getUserSources(userId: number): Promise<DocumentSourceResponseDto[]> {
-    const sources = await this.repository.findByUserId(userId);
+  async getUserSources(userId: number, userRole?: string): Promise<DocumentSourceResponseDto[]> {
+    // Los usuarios USER ven todas las fuentes activas para poder navegar y ver archivos procesados
+    // Los ADMIN ven solo sus propias fuentes
+    let sources;
+    if (userRole === 'USER') {
+      sources = await this.repository.findAllActive();
+    } else {
+      sources = await this.repository.findByUserId(userId);
+    }
     return sources.map(this.toResponseDto);
   }
 
-  async getSourceById(id: number, userId: number, includeCredentials = false): Promise<DocumentSourceResponseDto | null> {
+  async getSourceById(id: number, userId: number, includeCredentials = false, userRole?: string): Promise<DocumentSourceResponseDto | null> {
     const source = await this.repository.findById(id);
-    if (!source || source.userId !== userId) {
+    if (!source) {
       return null;
+    }
+    
+    // Los usuarios USER pueden ver cualquier fuente activa (sin credenciales)
+    // Los ADMIN solo pueden ver sus propias fuentes
+    if (userRole !== 'USER' && source.userId !== userId) {
+      return null;
+    }
+    
+    // Los usuarios USER no pueden ver credenciales
+    if (userRole === 'USER' && includeCredentials) {
+      includeCredentials = false;
     }
     
     const response = this.toResponseDto(source);
@@ -116,9 +134,15 @@ export class DocumentSourcesApplication {
     return true;
   }
 
-  async listFiles(sourceId: number, userId: number, folderId?: string): Promise<CloudFileDto[]> {
+  async listFiles(sourceId: number, userId: number, folderId?: string, userRole?: string): Promise<CloudFileDto[]> {
     const source = await this.repository.findById(sourceId);
-    if (!source || source.userId !== userId) {
+    if (!source) {
+      throw new Error('Fuente de documentos no encontrada');
+    }
+    
+    // Los usuarios USER pueden acceder a cualquier fuente activa
+    // Los ADMIN solo pueden acceder a sus propias fuentes
+    if (userRole !== 'USER' && source.userId !== userId) {
       throw new Error('Fuente de documentos no encontrada');
     }
 

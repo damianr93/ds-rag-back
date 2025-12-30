@@ -4,6 +4,7 @@ import { PdfTextExtractor } from './pdf.extractor';
 import { DocxTextExtractor } from './docx.extractor';
 import { DocTextExtractor } from './doc.extractor';
 import { TxtTextExtractor } from './txt.extractor';
+import { ExcelTextExtractor } from './excel.extractor';
 
 export class TextExtractorRegistry {
   private readonly extractors: TextExtractor[] = [
@@ -11,6 +12,7 @@ export class TextExtractorRegistry {
     new DocxTextExtractor(),
     new DocTextExtractor(),
     new TxtTextExtractor(),
+    new ExcelTextExtractor(),
   ];
 
   getExtractor(filePath: string): TextExtractor {

@@ -50,11 +50,13 @@ export class DocumentSourcesController {
   getUserSources = async (req: Request, res: Response): Promise<void> => {
     try {
       const userId = (req as AuthenticatedRequest).user?.id;
+      const userRole = (req as AuthenticatedRequest).user?.role;
       if (!userId) {
         res.status(401).json({ error: 'Unauthorized' });
         return;
       }
-      const sources = await this.application.getUserSources(userId);
+      // Los usuarios USER ven todas las fuentes activas, los ADMIN ven solo las suyas
+      const sources = await this.application.getUserSources(userId, userRole);
       res.json(sources);
     } catch (error) {
       console.error('Error fetching user sources:', error);
@@ -77,7 +79,7 @@ export class DocumentSourcesController {
       const sourceId = parseInt(req.params.id);
       const includeCredentials = req.query.includeCredentials === 'true' && userRole === 'ADMIN';
 
-      const source = await this.application.getSourceById(sourceId, userId, includeCredentials);
+      const source = await this.application.getSourceById(sourceId, userId, includeCredentials, userRole);
       if (!source) {
         res.status(404).json({ error: 'Source not found' });
         return;
@@ -142,6 +144,7 @@ export class DocumentSourcesController {
   listFiles = async (req: Request, res: Response): Promise<void> => {
     try {
       const userId = (req as AuthenticatedRequest).user?.id;
+      const userRole = (req as AuthenticatedRequest).user?.role;
       if (!userId) {
         res.status(401).json({ error: 'Unauthorized' });
         return;
@@ -149,7 +152,7 @@ export class DocumentSourcesController {
       const sourceId = parseInt(req.params.id);
       const folderId = req.query.folderId as string | undefined;
 
-      const files = await this.application.listFiles(sourceId, userId, folderId);
+      const files = await this.application.listFiles(sourceId, userId, folderId, userRole);
       res.json(files);
     } catch (error) {
       console.error('Error listing files:', error);

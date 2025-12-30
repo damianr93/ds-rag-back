@@ -105,6 +105,15 @@ export class PrismaTrackedFileRepository implements TrackedFileRepository {
   }
 
   async updateStatus(id: number, status: TrackedFileEntity['status'], errorMessage?: string): Promise<void> {
+    const file = await this.prisma.trackedFile.findUnique({
+      where: { id },
+      select: { lastProcessedAt: true },
+    });
+
+    if (status === 'error' && file?.lastProcessedAt) {
+      return;
+    }
+
     await this.prisma.trackedFile.update({
       where: { id },
       data: {

@@ -10,6 +10,7 @@ export const createTrackedFilesRoutes = (
   // Todas las rutas requieren autenticación
   router.post('/', [AuthMiddleware.validateJWT], controller.trackFile);
   router.delete('/:sourceId/:fileId', [AuthMiddleware.validateJWT], controller.untrackFile);
+  router.delete('/:sourceId/:fileId/unrag', [AuthMiddleware.validateJWT], controller.unragFile);
   router.get('/:sourceId', [AuthMiddleware.validateJWT], controller.getTrackedFiles);
   router.get('/:sourceId/map', [AuthMiddleware.validateJWT], controller.getTrackedFilesMap);
   

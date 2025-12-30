@@ -63,5 +63,16 @@ export class PostgresDocumentVectorRepository implements DocumentVectorRepositor
       client.release();
     }
   }
+
+  async deleteBySource(source: string): Promise<number> {
+    const pool = getPool();
+    const client = await pool.connect();
+    try {
+      const result = await client.query('DELETE FROM document_vectors WHERE source = $1', [source]);
+      return result.rowCount || 0;
+    } finally {
+      client.release();
+    }
+  }
 }
 

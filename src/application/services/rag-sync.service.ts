@@ -82,11 +82,17 @@ export class RagSyncService {
           const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
           this.addLog('error', `✗ Error en ${file.fileName}: ${errorMessage}`, file.fileId, file.fileName);
           
-          await this.trackedFileRepository.updateStatus(
-            file.id,
-            'error',
-            errorMessage
-          );
+          const trackedFile = await this.trackedFileRepository.findById(file.id);
+          if (trackedFile && !trackedFile.lastProcessedAt) {
+            await this.trackedFileRepository.delete(file.id);
+            this.addLog('info', `Archivo ${file.fileName} removido del tracking debido a error`, file.fileId, file.fileName);
+          } else if (trackedFile) {
+            await this.trackedFileRepository.updateStatus(
+              file.id,
+              'error',
+              errorMessage
+            );
+          }
         }
       }
 
@@ -145,41 +151,74 @@ export class RagSyncService {
       return;
     }
 
-    // Usar el método del DocumentSourcesApplication que maneja la desencriptación
     const files = await this.documentSourcesApp.listFiles(source.id, userId, folder.fileId);
     
     this.addLog('info', `Encontrados ${files.length} archivos en ${folder.fileName}`, folder.fileId, folder.fileName);
 
-    // Procesar cada archivo de la carpeta
     for (const file of files) {
-      if (!file.isFolder) {
-        try {
-          // Crear o actualizar tracked file para este archivo
-          const existingTracked = await this.trackedFileRepository.findByFileId(source.id, file.id);
+      try {
+        const existingTracked = await this.trackedFileRepository.findByFileId(source.id, file.id);
+        
+        if (file.isFolder) {
+          let subfolderTracked = existingTracked;
           
-          if (!existingTracked) {
-            // Crear nuevo tracked file
-            const newTracked = await this.trackedFileRepository.create({
+          if (!subfolderTracked) {
+            subfolderTracked = await this.trackedFileRepository.create({
               sourceId: source.id,
               fileId: file.id,
               fileName: file.name,
               filePath: `${folder.filePath}/${file.name}`,
-              isFolder: false,
+              isFolder: true,
+              includeChildren: true,
               lastModified: file.modifiedTime || new Date(),
             });
-            
-            await this.processFile(newTracked, source, userId);
-          } else if (existingTracked.status === 'pending') {
-            await this.processFile(existingTracked, source, userId);
           }
-        } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
-          this.addLog('error', `Error en archivo ${file.name}: ${errorMessage}`, file.id, file.name);
+          
+          if (subfolderTracked.status === 'pending' || subfolderTracked.status === 'error') {
+            await this.trackedFileRepository.updateStatus(subfolderTracked.id, 'pending');
+            await this.processFolderFiles(subfolderTracked, source, userId);
+          }
+        } else {
+          let newTrackedCreated = false;
+          let trackedFileId: number | null = null;
+          
+          try {
+            if (!existingTracked) {
+              const newTracked = await this.trackedFileRepository.create({
+                sourceId: source.id,
+                fileId: file.id,
+                fileName: file.name,
+                filePath: `${folder.filePath}/${file.name}`,
+                isFolder: false,
+                lastModified: file.modifiedTime || new Date(),
+              });
+              
+              newTrackedCreated = true;
+              trackedFileId = newTracked.id;
+              await this.processFile(newTracked, source, userId);
+            } else if (existingTracked.status === 'pending' || existingTracked.status === 'error') {
+              trackedFileId = existingTracked.id;
+              if (!existingTracked.lastProcessedAt) {
+                await this.processFile(existingTracked, source, userId);
+              }
+            }
+          } catch (processError) {
+            if (trackedFileId) {
+              const trackedFile = await this.trackedFileRepository.findById(trackedFileId);
+              if (trackedFile && !trackedFile.lastProcessedAt) {
+                await this.trackedFileRepository.delete(trackedFileId);
+                this.addLog('info', `Archivo ${file.name} removido del tracking debido a error`, file.id, file.name);
+              }
+            }
+            throw processError;
+          }
         }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+        this.addLog('error', `Error en ${file.isFolder ? 'carpeta' : 'archivo'} ${file.name}: ${errorMessage}`, file.id, file.name);
       }
     }
 
-    // Marcar carpeta como completada
     await this.trackedFileRepository.updateProcessed(folder.id, 0);
   }
 
