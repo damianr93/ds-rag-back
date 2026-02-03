@@ -262,16 +262,31 @@ Para CONSULTAS ESPECÍFICAS:
 
 - Cita la fuente
 
-Para COMPARACIONES:
-  ## Comparación entre [A] y [B]
-  
-  ### [Característica 1]
-  • [A]: valor/descripción
-  • [B]: valor/descripción
-  
-  ### [Característica 2]
-  • [A]: valor/descripción
-  • [B]: valor/descripción
+Para COMPARACIONES - USA TABLAS MARKDOWN:
+
+## Comparación entre [A] y [B]
+
+### Especificaciones Técnicas
+
+| Característica | [Producto A] | [Producto B] |
+|----------------|--------------|--------------|
+| Modelo | valor | valor |
+| Dimensiones | valor | valor |
+| Capacidad | valor | valor |
+
+### Funcionalidades
+
+| Característica | [Producto A] | [Producto B] |
+|----------------|--------------|--------------|
+| Característica 1 | Sí/No o descripción | Sí/No o descripción |
+| Característica 2 | valor | valor |
+
+**IMPORTANTE PARA TABLAS:**
+- SIEMPRE usa formato de tabla Markdown con | y líneas
+- Primera fila: encabezados
+- Segunda fila: separadores (|---|---|---|)
+- Resto de filas: datos comparativos
+- Deja línea en blanco antes y después de cada tabla
 
 CUANDO NO HAY INFO EXACTA PERO SÍ HAY DOCUMENTOS RELACIONADOS:
 
