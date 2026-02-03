@@ -12,6 +12,7 @@ import { DocumentSourceRepository } from '../../domain/document-sources/ports/re
 import { CloudStorageProvider } from '../../domain/document-sources/ports/services';
 import { EncryptionService } from '../services/encryption.service';
 import { DocumentSourceCredentials } from '../../domain/entities/document-source.entity';
+import { SourceUrlGenerator } from '../../infrastructure/rag/utils/source-url-generator';
 
 export class RAGApplication {
   private encryptionService?: EncryptionService;
@@ -40,27 +41,34 @@ export class RAGApplication {
     const messages = [
       {
         role: 'system' as const,
-        content: `Eres un optimizador de consultas para búsqueda vectorial semántica. Tu ÚNICA función es transformar la consulta del usuario en una versión optimizada.
+        content: `Eres un optimizador de consultas para búsqueda vectorial semántica en documentos corporativos.
 
-REGLAS ESTRICTAS:
-- Responde ÚNICAMENTE con el string de búsqueda optimizado
-- NO agregues introducciones, explicaciones o comentarios
-- NO uses frases como "aquí tienes", "la consulta optimizada es"
-- Combina el contexto conversacional con la pregunta específica
-- Expande términos vagos con contexto de la conversación
-- Mantén palabras clave técnicas importantes
-- Elimina palabras de relleno pero conserva el significado semántico
-- Si la pregunta es muy específica pero el contexto da más información, enriquécela
-- IMPORTANTE: Revise muy criticamente el contexto de conversacion, y si detectas que el usuario hizo una repregunta sobre un tema anterior el string de busqueda debe reflejar justamente esa busqueda.
+TU ÚNICA FUNCIÓN:
+Transformar la pregunta del usuario en palabras clave optimizadas para búsqueda semántica.
 
-EJEMPLOS:
-Contexto: discusión sobre fútbol → Pregunta: "¿y los goles?" → Respuesta: "estadísticas goles fútbol partidos marcadores"
-Contexto: programación Python → Pregunta: "¿cómo optimizar?" → Respuesta: "optimización rendimiento código Python técnicas algoritmos"
-Contexto: recetas cocina → Pregunta: "sin gluten" → Respuesta: "recetas sin gluten celíacos ingredientes alternativos harina"`
+REGLAS OBLIGATORIAS:
+- Responde SOLO con palabras clave en español, separadas por espacios
+- NO añadas frases completas, introducciones o explicaciones
+- Mantén términos técnicos y nombres específicos exactamente como aparecen
+- Si hay contexto previo de conversación, combínalo con la pregunta actual
+- Si detectas una repregunta (ej: "¿y eso?", "¿cuánto?"), usa el tema del contexto anterior
+- Elimina palabras de relleno: "qué", "cómo", "dónde", "cuándo", "por qué"
+- Expande siglas y acrónimos si el contexto lo sugiere
+
+EJEMPLOS CORRECTOS:
+"¿Qué son los EQL?" → "EQL definición significado"
+"¿Cuántos días de vacaciones tengo?" → "días vacaciones beneficios empleado"
+"¿Y el presupuesto?" (contexto: marketing) → "presupuesto marketing asignación costos"
+"¿Cómo funciona el sistema?" → "sistema funcionamiento operación proceso"
+
+EJEMPLOS INCORRECTOS:
+❌ "La consulta optimizada es: EQL definición"
+❌ "Aquí tienes las palabras clave: vacaciones días"
+❌ "Para responder sobre EQL necesitas buscar..."`,
       },
       {
         role: 'user' as const,
-        content: `CONTEXTO DE CONVERSACIÓN:\n${contextMessages}\n\nPREGUNTA ACTUAL:\n${currentQuestion}`,
+        content: `CONTEXTO DE CONVERSACIÓN RECIENTE:\n${contextMessages}\n\nPREGUNTA ACTUAL DEL USUARIO:\n${currentQuestion}`,
       },
     ];
     return messages;
@@ -74,6 +82,13 @@ Contexto: recetas cocina → Pregunta: "sin gluten" → Respuesta: "recetas sin 
       .replace(/\s+/g, ' ')
       .trim();
     if (cleaned.length < 3 || cleaned.toLowerCase().includes('no puedo')) {
+      return this.basicQueryCleanup(fallback);
+    }
+    
+    if (fallback.toLowerCase().includes('de que') || 
+        fallback.toLowerCase().includes('de qué') || 
+        fallback.toLowerCase().includes('contame') ||
+        fallback.toLowerCase().includes('explicame')) {
       return this.basicQueryCleanup(fallback);
     }
 
@@ -100,53 +115,259 @@ Contexto: recetas cocina → Pregunta: "sin gluten" → Respuesta: "recetas sin 
     }
 
     const embed = await this.embeddings.generateEmbedding(optimized);
-    const similar = await this.docRepo.findSimilar(embed, 5);
-    const context = similar.map(d => `- ${d.text} (fuente: ${d.source})`).join('\n\n');
+    
+    const lowerQuestion = question.toLowerCase();
+    const wantsFullDocument = 
+      lowerQuestion.includes('documento completo') || 
+      lowerQuestion.includes('resumen del documento') ||
+      lowerQuestion.includes('resumen completo') ||
+      lowerQuestion.includes('todo el documento') ||
+      lowerQuestion.includes('documento entero') ||
+      lowerQuestion.includes('dame un resumen') ||
+      lowerQuestion.includes('resumen de') ||
+      lowerQuestion.includes('qué dice') ||
+      lowerQuestion.includes('que dice') ||
+      lowerQuestion.includes('de que habla') ||
+      lowerQuestion.includes('de qué habla') ||
+      lowerQuestion.includes('de que trata') ||
+      lowerQuestion.includes('de qué trata') ||
+      lowerQuestion.includes('sobre que trata') ||
+      lowerQuestion.includes('sobre qué trata') ||
+      lowerQuestion.includes('contame') ||
+      lowerQuestion.includes('cuéntame') ||
+      lowerQuestion.includes('explicame') ||
+      lowerQuestion.includes('explícame') ||
+      (lowerQuestion.includes('resumen') && (lowerQuestion.includes('documento') || lowerQuestion.includes('ese') || lowerQuestion.includes('este') || lowerQuestion.includes('eso')));
+    
+    const isComparison = lowerQuestion.includes('compar') || lowerQuestion.includes('diferencia') || lowerQuestion.includes('versus') || lowerQuestion.includes('vs');
+    
+    let k = 5;
+    if (wantsFullDocument) k = 15;
+    else if (isComparison) k = 10;
+    else if (lowerQuestion.length > 100) k = 8;
+    
+    const similar = await this.docRepo.findSimilar(embed, k);
+
+    let context = '';
+    let documentContext = '';
+    
+    if (wantsFullDocument && similar.length > 0) {
+      const targetSource = similar[0].source;
+      const sourceLink = SourceUrlGenerator.formatSourceWithLink(
+        similar[0].source, 
+        similar[0].sourceUrl, 
+        similar[0].sourceType
+      );
+      const allChunks = await this.docRepo.getAllChunksBySource(targetSource);
+      
+      if (allChunks.length <= 30) {
+        context = `DOCUMENTO COMPLETO: ${sourceLink}\n\n` + 
+          allChunks.map((c, idx) => `--- Sección ${idx + 1} ---\n${c.text}`).join('\n\n');
+        documentContext = `Documento completo con todas sus ${allChunks.length} secciones.`;
+      } else {
+        const chunkText = allChunks.map((c, idx) => `--- Sección ${idx + 1} ---\n${c.text}`).join('\n\n');
+        const previewText = chunkText.substring(0, 25000);
+        context = `DOCUMENTO: ${sourceLink}\n(Mostrando las primeras ~${Math.min(30, allChunks.length)} secciones más relevantes de ${allChunks.length} totales)\n\n${previewText}`;
+        documentContext = `Documento extenso con ${allChunks.length} secciones. Mostrando las más importantes.`;
+      }
+    } else if (isComparison && similar.length > 1) {
+      const sources = [...new Set(similar.map(d => d.source))];
+      context = sources.map(source => {
+        const chunks = similar.filter(d => d.source === source);
+        const link = SourceUrlGenerator.formatSourceWithLink(source, chunks[0].sourceUrl, chunks[0].sourceType);
+        return `DOCUMENTO: ${link}\n\n` + 
+          chunks.map(c => c.text).join('\n\n') + '\n\n---\n\n';
+      }).join('\n');
+      documentContext = `Información de ${sources.length} documento(s) para comparar.`;
+    } else {
+      context = similar.map((d, idx) => {
+        const link = SourceUrlGenerator.formatSourceWithLink(d.source, d.sourceUrl, d.sourceType);
+        return `[Fragmento ${idx + 1}]\n${d.text}\n(fuente: ${link})`;
+      }).join('\n\n---\n\n');
+      documentContext = `${similar.length} fragmentos relevantes encontrados.`;
+    }
 
     const recentHistory = history.slice(-10).map(m => ({ role: m.role, content: m.content })) as any[];
     const messages: any[] = [
       {
         role: 'system',
         content: `
-Eres un asistente experto en análisis documental que utiliza RAG (Retrieval Augmented Generation).
+Eres un asistente especializado en extracción y análisis de información técnica de documentos empresariales.
 
-OBJETIVO:
-- Ayudar al usuario a responder preguntas usando únicamente la información provista en el CONTEXTO.
-- Si la respuesta no está en el CONTEXTO, guiar al usuario para reformular la pregunta y obtener mejor información.
+IDIOMA:
+- SIEMPRE en ESPAÑOL, sin excepciones.
 
-REGLAS IMPORTANTES:
-1. Usa el CONTEXTO recuperado para responder, y si no es suficiente dialoga con el usuario para guiarlo a una mejor consulta que traiga un mejor contexto.
-2. No inventes información.
-3. Si no hay suficiente información, ofrece al usuario una o varias preguntas de aclaración
-   o palabras clave alternativas que podrían mejorar la búsqueda.
-4. Mantén consistencia con el historial de conversación.
-5. Responde en español claro, conciso y estructurado.
-6. Siempre cita la fuente entre paréntesis al final de cada fragmento relevante (ejemplo: fuente: archivo.pdf).
-7. Si el CONTEXTO incluye múltiples fuentes, integra y compara la información.
-8. Si el usuario hace una pregunta ambigua, pide que la precise.
-9. Si el usuario saluda con un hola, o pregunta cosas que no estan en el contexto, presentate y explicale tu rol aclarando que no hay informacion en el RAG sobre su consulta, pero que en base a tu conocimiento como LLM podes darle una respuesta (cuando sea el caso)
-10. IMPORTANTE: Analiza la recentHistory para discernir a que se refiere el usuario con la ultima pregunta, para responder consistentemente.
+REGLA FUNDAMENTAL:
+- Extraes y presentas SOLO información del CONTEXTO proporcionado
+- Si NO está en el CONTEXTO: di claramente "No encontré información sobre [tema]"
+- Nunca inventes, especules o uses conocimiento general
 
-FORMATO DE RESPUESTA:
-- Si la respuesta es breve: un párrafo claro.
-- Si la respuesta es extensa o compleja: usa viñetas o subtítulos.
-- Si no encontrás suficiente información: responde en dos pasos:
-   a) "No encontré información suficiente en los documentos para responder con certeza."
-   b) Formula inmediatamente una pregunta aclaratoria o sugiere reformulaciones.
+TU ESPECIALIDAD - EXTRACCIÓN EXHAUSTIVA:
+
+Cuando recibes DOCUMENTO COMPLETO o MÚLTIPLES FRAGMENTOS:
+✅ EXTRAE toda la información técnica, especificaciones, datos
+✅ ORGANIZA en secciones claras con subtítulos
+✅ USA VIÑETAS (•) para listar características, specs, pasos
+✅ INCLUYE números, medidas, códigos, modelos tal cual aparecen
+✅ PRESENTA la info, no solo describas que existe
+✅ Si hay tablas o datos estructurados, recréalos en formato limpio
+✅ Lee TODO el contexto de principio a fin antes de responder
+
+❌ NO digas solo "el documento trata sobre..."
+❌ NO resumas en una frase lo que debería ser una lista completa
+❌ NO omitas detalles técnicos o especificaciones
+❌ NO seas genérico cuando hay datos específicos
+❌ NO uses frases como "según el fragmento", "fragmento X", "según los documentos proporcionados"
+❌ NO te enfoques solo en un tema si el usuario pide resumen completo
+
+ESTRUCTURA DE RESPUESTA EFECTIVA:
+
+Para RESÚMENES:
+  ## [Título del tema principal]
+  
+  ### [Subtema 1]
+  • Dato específico 1
+  • Dato específico 2
+  • Especificación técnica con números
+  
+  ### [Subtema 2]
+  • Característica A: valor/descripción
+  • Característica B: valor/descripción
+  
+  ### Especificaciones Técnicas
+  • Modelo: [código]
+  • Medidas: [valores]
+  • Capacidad: [número]
+  
+  (fuente: [documento](url))
+
+Para CONSULTAS ESPECÍFICAS:
+- Respuesta directa con los datos encontrados
+- Viñetas si hay múltiples items
+- Cita la fuente
+
+Para COMPARACIONES:
+  ## Comparación entre [A] y [B]
+  
+  ### [Característica 1]
+  • [A]: valor/descripción
+  • [B]: valor/descripción
+  
+  ### [Característica 2]
+  • [A]: valor/descripción
+  • [B]: valor/descripción
+
+CUANDO NO HAY INFO:
+"No encontré información sobre [tema específico] en los documentos disponibles. ¿Podrías reformular con otras palabras clave?"
+
+FORMATO MARKDOWN:
+- ## para títulos de sección
+- ### para subtítulos
+- • para viñetas de lista
+- **negrita** para destacar términos clave
+- Fuentes al final: (fuente: [nombre](url))
         `,
       },
       ...recentHistory,
     ];
 
-    if (context.length < 300) {
+    if (context.length < 200) {
       messages.push({
         role: 'user',
-        content: `No se encontró suficiente contexto en los documentos para la pregunta actual.\nPregunta original: "${question}"\n\nAyuda al usuario a refinar su consulta sugiriendo posibles interpretaciones, palabras clave o temas relacionados que podrían mejorar la búsqueda.`,
+        content: `SITUACIÓN: No se encontró información relevante en los documentos disponibles.
+
+PREGUNTA DEL USUARIO: "${question}"
+
+INSTRUCCIONES:
+1. Responde en ESPAÑOL
+2. Di claramente: "No encontré información sobre [tema específico] en los documentos disponibles."
+3. NO inventes información ni uses conocimiento general
+4. Sugiere al usuario:
+   - Reformular con palabras clave diferentes
+   - Especificar más detalles
+   - Verificar si el documento correcto fue cargado`,
       });
     } else {
+      const instructionType = wantsFullDocument 
+        ? `RESUMEN DE DOCUMENTO COMPLETO SOLICITADO`
+        : isComparison 
+        ? `COMPARACIÓN DE DOCUMENTOS`
+        : `CONSULTA ESPECÍFICA`;
+      
+      let specificInstructions = '';
+      if (wantsFullDocument) {
+        specificInstructions = `
+IMPORTANTE - RESUMEN COMPLETO SOLICITADO:
+
+ESTRATEGIA OBLIGATORIA:
+1. IGNORA la pregunta anterior del usuario - ahora quiere un RESUMEN COMPLETO
+2. Lee TODO el contexto proporcionado de principio a fin
+3. Organiza la información en secciones temáticas con ##
+4. EXTRAE cada punto relevante con viñetas •
+5. Incluye TODOS los datos técnicos: modelos, números, medidas, especificaciones
+6. Si hay listas de características, pónlas todas
+7. Si hay tablas, recréalas en formato limpio
+8. Si hay pasos o procedimientos, numéralos
+
+LO QUE NUNCA HAGAS:
+❌ NO digas solo "el documento trata sobre..." - ESO NO ES UN RESUMEN
+❌ NO te quedes en un tema - CUBRE TODO el documento
+❌ NO omitas especificaciones técnicas
+❌ NO uses frases como "según el fragmento X" o "fragmento Y"
+❌ NO hagas un párrafo genérico - USA ESTRUCTURA con ## y •
+
+FORMATO OBLIGATORIO:
+## [Título principal del documento]
+
+### [Primera sección temática]
+• Punto específico 1
+• Punto específico 2
+• Dato técnico con números
+
+### [Segunda sección temática]
+• Característica A: descripción/valor
+• Característica B: descripción/valor
+
+[... continúa con TODAS las secciones relevantes ...]
+
+(fuente: [documento](url))`;
+      } else if (isComparison) {
+        specificInstructions = `
+IMPORTANTE - ESTRATEGIA DE COMPARACIÓN:
+- Crea una comparación estructurada por categorías
+- Identifica características en común y diferencias
+- Usa formato de lista con • para cada característica
+- Organiza por: especificaciones técnicas, funcionalidades, aplicaciones, etc.
+- Si faltan datos de uno de los items, indícalo claramente`;
+      } else {
+        specificInstructions = `
+IMPORTANTE - ESTRATEGIA DE RESPUESTA:
+- Responde directamente la pregunta con los datos disponibles
+- Si hay varios fragmentos con info relacionada, sintetiza todo
+- Usa viñetas • cuando listes características o items
+- Prioriza información específica y técnica`;
+      }
+
       messages.push({
         role: 'user',
-        content: `CONTEXTO:\n${context}\n\nPREGUNTA:\n${question}`,
+        content: `TIPO DE CONSULTA: ${instructionType}
+${documentContext}
+
+${specificInstructions}
+
+CONTEXTO DE LOS DOCUMENTOS:
+${context}
+
+PREGUNTA DEL USUARIO:
+${question}
+
+INSTRUCCIONES GENERALES:
+- Responde SOLO basándote en el CONTEXTO anterior
+- Responde en ESPAÑOL siempre
+- Cita las fuentes al final con el formato: (fuente: [nombre](url))
+- NO inventes ni agregues información de tu conocimiento general
+- Si piden resumen: EXTRAE y ORGANIZA toda la información relevante del contexto
+- Usa formato Markdown: ## para títulos, • para listas, **negrita** para destacar`,
       });
     }
 
@@ -174,7 +395,10 @@ FORMATO DE RESPUESTA:
 
   async searchSimilarDocuments(embedding: number[], k = 5): Promise<string[]> {
     const docs = await this.docRepo.findSimilar(embedding, k);
-    return docs.map(d => `- ${d.text} (fuente: ${d.source})`);
+    return docs.map(d => {
+      const link = SourceUrlGenerator.formatSourceWithLink(d.source, d.sourceUrl, d.sourceType);
+      return `- ${d.text} (fuente: ${link})`;
+    });
   }
 
   async deactivateConversation(conversationId: number): Promise<boolean> {
@@ -202,6 +426,8 @@ FORMATO DE RESPUESTA:
         text: chunk,
         embedding: emb,
         source: filename,
+        sourceType: 'local',
+        sourceUrl: undefined,
         chunkIndex: index,
         totalChunks: chunks.length,
       });
@@ -321,15 +547,18 @@ FORMATO DE RESPUESTA:
         return { success: false, message: `El archivo ${filename} no contiene texto extraíble` };
       }
 
-      // Procesar chunks
       const chunks = this.chunker.chunk(text);
+      const sourceUrl = SourceUrlGenerator.generateUrl(fileId, source.provider, fileName || fileId);
+      
       let index = 1;
       for (const chunk of chunks) {
         const emb = await this.embeddings.generateEmbedding(chunk);
         await this.docRepo.insertChunk({
           text: chunk,
           embedding: emb,
-          source: sanitizedFilename, // ✅ Usar nombre sanitizado
+          source: sanitizedFilename,
+          sourceUrl,
+          sourceType: source.provider,
           chunkIndex: index,
           totalChunks: chunks.length,
         });

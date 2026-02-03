@@ -14,6 +14,8 @@ import { PostgresDocumentVectorRepository } from '../rag/repositories/postgres-d
 import { PrismaProcessedFileRepository } from '../rag/repositories/prisma-processed-file.repository';
 import { OpenAIEmbeddingsProvider } from '../rag/providers/openai-embeddings.provider';
 import { OpenAIChatProvider } from '../rag/providers/openai-chat.provider';
+import { OllamaEmbeddingsProvider } from '../rag/providers/ollama-embeddings.provider';
+import { OllamaChatProvider } from '../rag/providers/ollama-chat.provider';
 import { SimpleChunker } from '../rag/utils/chunker';
 import { closePool } from '../db/pg';
 import { ConsoleLogger } from '../logger/ConsoleLogger';
@@ -80,18 +82,27 @@ export class Container {
     }
 
     console.log('[Container] Configurando dependencias...');
-    console.log('[Container] Usando OpenAI para chat y embeddings');
+    console.log(`[Container] LLM Provider: ${envs.LLM_PROVIDER}`);
 
     try {
-      // Shared infrastructure
       this.register<ConsoleLogger>('Logger', () => new ConsoleLogger(), { singleton: true });
       
-      // LLM Providers - OpenAI
-      if (!envs.OPENAI_API_KEY) {
-        throw new Error('OPENAI_API_KEY es requerida en el archivo .env');
+      const provider = envs.LLM_PROVIDER.toLowerCase();
+
+      if (provider === 'ollama') {
+        console.log(`[Container] Usando Ollama - Chat: ${envs.OLLAMA_CHAT_MODEL}, Embeddings: ${envs.OLLAMA_EMBEDDING_MODEL}`);
+        this.register('ChatProvider', () => new OllamaChatProvider(envs.OLLAMA_URL, envs.OLLAMA_CHAT_MODEL), { singleton: true });
+        this.register('EmbeddingsProvider', () => new OllamaEmbeddingsProvider(envs.OLLAMA_URL, envs.OLLAMA_EMBEDDING_MODEL), { singleton: true });
+      } else if (provider === 'openai') {
+        if (!envs.OPENAI_API_KEY) {
+          throw new Error('OPENAI_API_KEY es requerida cuando LLM_PROVIDER=openai');
+        }
+        console.log(`[Container] Usando OpenAI - Chat: ${envs.OPENAI_CHAT_MODEL}, Embeddings: ${envs.OPENAI_EMBEDDING_MODEL}`);
+        this.register('ChatProvider', () => new OpenAIChatProvider(envs.OPENAI_API_KEY, envs.OPENAI_CHAT_MODEL), { singleton: true });
+        this.register('EmbeddingsProvider', () => new OpenAIEmbeddingsProvider(envs.OPENAI_API_KEY, envs.OPENAI_EMBEDDING_MODEL), { singleton: true });
+      } else {
+        throw new Error(`LLM_PROVIDER no soportado: ${envs.LLM_PROVIDER}. Usa 'openai' u 'ollama'`);
       }
-      this.register('ChatProvider', () => new OpenAIChatProvider(envs.OPENAI_API_KEY, envs.OPENAI_CHAT_MODEL), { singleton: true });
-      this.register('EmbeddingsProvider', () => new OpenAIEmbeddingsProvider(envs.OPENAI_API_KEY, envs.OPENAI_EMBEDDING_MODEL), { singleton: true });
 
       // Auth
       this.register<PrismaUserRepository>('UserRepository', () => new PrismaUserRepository());

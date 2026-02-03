@@ -24,17 +24,15 @@ export const envs = {
   COL_TEXT: get('COL_TEXT').default('text').asString(),
   COL_SOURCE: get('COL_SOURCE').default('source').asString(),
 
-  // OpenAI (LLM & Embeddings)
-  OPENAI_API_KEY: get('OPENAI_API_KEY').required().asString(),
+  LLM_PROVIDER: get('LLM_PROVIDER').default('openai').asString(),
+
+  OPENAI_API_KEY: get('OPENAI_API_KEY').default('').asString(),
   OPENAI_CHAT_MODEL: get('OPENAI_CHAT_MODEL').default('gpt-4o-mini').asString(),
   OPENAI_EMBEDDING_MODEL: get('OPENAI_EMBEDDING_MODEL').default('text-embedding-3-small').asString(),
 
-  /* OLLAMA - Deshabilitado por ahora (descomentar si quieres volver a usarlo)
-  LLM_PROVIDER: get('LLM_PROVIDER').default('openai').asString(),
   OLLAMA_URL: get('OLLAMA_URL').default('http://localhost:11434').asString(),
-  MODEL: get('MODEL').default('llama3.2').asString(),
-  EMBEDDING_MODEL: get('EMBEDDING_MODEL').default('nomic-embed-text').asString(),
-  */
+  OLLAMA_CHAT_MODEL: get('OLLAMA_CHAT_MODEL').default('llama3.2').asString(),
+  OLLAMA_EMBEDDING_MODEL: get('OLLAMA_EMBEDDING_MODEL').default('nomic-embed-text').asString(),
 }
 
 

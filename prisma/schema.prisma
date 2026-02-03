@@ -31,6 +31,8 @@ model DocumentVector {
   text        String
   embedding   Unsupported("vector(1536)")
   source      String
+  sourceUrl   String?  @map("source_url")
+  sourceType  String?  @map("source_type")
   chunkIndex  Int      @map("chunk_index")
   totalChunks Int      @map("total_chunks")
   createdAt   DateTime @default(now()) @map("created_at")

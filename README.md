@@ -4,13 +4,25 @@ Sistema de Retrieval Augmented Generation (RAG) con soporte para múltiples fuen
 
 ## 🚀 Características
 
-- ✅ **RAG con OpenAI** (GPT-4o-mini + text-embedding-3-small)
-- ✅ **Integración con Cloud Storage** (Google Drive, Dropbox, OneDrive)
-- ✅ **OAuth 2.0 Flow** con auto-refresh de tokens
+### RAG & IA
+- ✅ **Multi-Provider LLM** (OpenAI o Ollama) configurable vía `.env`
+- ✅ **Enlaces clickeables** a documentos fuente en respuestas
+- ✅ **Resumen de documento completo** con detección automática
+- ✅ **Búsqueda semántica** con pgvector
+- ✅ **Optimización de queries** con contexto conversacional
+- ✅ **Respuestas estrictas** - SOLO usa información de documentos, no inventa
+- ✅ **Siempre en español** - sin cambios de idioma
+
+### Integración Cloud
+- ✅ **Google Drive, Dropbox, OneDrive** con OAuth 2.0
+- ✅ **Auto-refresh de tokens** OAuth
 - ✅ **Sincronización automática** de archivos
+- ✅ **Tracking de cambios** en documentos
+
+### Seguridad & Arquitectura
 - ✅ **Encriptación AES-256-CBC** para credenciales
 - ✅ **PostgreSQL + pgvector** para embeddings
-- ✅ **Arquitectura DDD** (Domain-Driven Design)
+- ✅ **Arquitectura Hexagonal** (Ports & Adapters)
 - ✅ **TypeScript + Prisma ORM**
 - ✅ **Listo para Railway** ☁️
 
@@ -44,20 +56,27 @@ docker exec -it ia-postgres-ds psql -U postgres -d ia-rag -c "CREATE EXTENSION I
 ### 3. Configurar Variables de Entorno
 
 ```bash
-cp env.example .env
+cp .env.template .env
 ```
 
 Edita `.env`:
 
 ```bash
 # Database
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/ia-rag
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/iad_db
 
-# OpenAI (REQUERIDO)
+# LLM Provider: 'openai' o 'ollama'
+LLM_PROVIDER=openai
+
+# OpenAI (si LLM_PROVIDER=openai)
 OPENAI_API_KEY=sk-tu-api-key-aqui
 OPENAI_CHAT_MODEL=gpt-4o-mini
 OPENAI_EMBEDDING_MODEL=text-embedding-3-small
-LLM_PROVIDER=openai
+
+# Ollama (si LLM_PROVIDER=ollama)
+OLLAMA_URL=http://localhost:11434
+OLLAMA_CHAT_MODEL=gemma3:4b
+OLLAMA_EMBEDDING_MODEL=embeddinggemma:latest
 
 # Security (genera claves seguras con: node generate-keys.js)
 JWT_SEED=tu-clave-jwt-super-secreta-minimo-64-caracteres
@@ -132,6 +151,7 @@ npm run railway:build    # Build para Railway
 npm run railway:start    # Start para Railway
 npm run make-admin       # Crear usuario admin
 npm run generate-keys    # Generar claves seguras
+npm run check-dimensions # Verificar dimensiones de embeddings
 ```
 
 ## 🏗️ Estructura del Proyecto
@@ -204,12 +224,87 @@ src/
 - **Express.js** - Framework web
 - **Prisma** - ORM
 - **PostgreSQL** + **pgvector** - Base de datos vectorial
-- **OpenAI API** - Embeddings y LLM
+- **OpenAI API** / **Ollama** - Embeddings y LLM (configurable)
 - **JWT** - Autenticación
 - **bcrypt** - Hashing de passwords
 - **axios** - HTTP client para APIs externas
 
+## 🤖 Cambiar Provider de LLM
+
+El sistema soporta múltiples providers. Para cambiar entre OpenAI y Ollama:
+
+### Usar OpenAI (Recomendado para producción)
+```bash
+# En .env
+LLM_PROVIDER=openai
+OPENAI_API_KEY=sk-tu-key-aqui
+OPENAI_CHAT_MODEL=gpt-4o-mini
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+```
+
+### Usar Ollama (Recomendado para desarrollo local)
+```bash
+# 1. Instalar Ollama
+# https://ollama.ai
+
+# 2. Descargar modelos
+ollama pull gemma3:4b
+ollama pull embeddinggemma:latest
+
+# 3. En .env
+LLM_PROVIDER=ollama
+OLLAMA_URL=http://localhost:11434
+OLLAMA_CHAT_MODEL=gemma3:4b
+OLLAMA_EMBEDDING_MODEL=embeddinggemma:latest
+```
+
+El cambio es **automático** al reiniciar el servidor. No requiere cambios en el código.
+
+**⚠️ Nota sobre dimensiones de embeddings:**
+- **OpenAI** (`text-embedding-3-small`): 1536 dimensiones
+- **Ollama** (`embeddinggemma`): 768 dimensiones
+
+Si cambias de provider, debes limpiar los documentos vectorizados existentes:
+```bash
+# Limpiar vectores con dimensiones incompatibles
+npx prisma migrate reset --force
+```
+
+## 🔗 Enlaces Clickeables en Respuestas
+
+Las respuestas del chatbot incluyen enlaces directos a los documentos fuente:
+
+```
+Usuario: "¿Cuál es el presupuesto?"
+IA: "El presupuesto es de $500,000 según la página 3
+     (fuente: [Presupuesto_2024.pdf](https://drive.google.com/file/d/abc123/view))"
+```
+
+**Soporte:**
+- 📄 Google Drive → `https://drive.google.com/file/d/{fileId}/view`
+- 📦 Dropbox → `https://www.dropbox.com/home{path}`
+- ☁️ OneDrive → `https://onedrive.live.com/?id={fileId}`
+- 💾 Local → `/api/files/{filename}`
+
+**Frontend:** Renderiza con Markdown para convertir enlaces en clickeables.
+
 ## 🐛 Troubleshooting
+
+### Error: "expected 1536 dimensions, not 768" (o viceversa)
+
+Este error ocurre cuando cambias de provider con vectores existentes en la BD:
+
+**Solución 1 - Verificar dimensiones:**
+```bash
+npm run check-dimensions
+```
+
+**Solución 2 - Limpiar vectores:**
+```bash
+npx prisma migrate reset --force
+```
+
+Luego vuelve a procesar tus documentos con el provider actual.
 
 ### Error: "pgvector extension not found"
 ```sql
@@ -251,13 +346,16 @@ El sistema automáticamente refresca tokens expirados:
 - Reintenta la operación
 - Actualiza credenciales en BD
 
-## 📦 Próximas Características
+## 📦 Roadmap
 
-- [ ] Soporte para más tipos de archivo (Excel, PPT, etc.)
-- [ ] Búsqueda semántica avanzada
-- [ ] Múltiples modelos de embeddings
+- [x] Multi-provider LLM (OpenAI/Ollama)
+- [x] Enlaces clickeables a documentos fuente
+- [x] Resumen de documento completo
+- [ ] Soporte para Claude, Gemini, etc.
 - [ ] Cache de embeddings
 - [ ] Webhooks para sincronización automática
+- [ ] Preview de documentos en modal
+- [ ] Map-Reduce para documentos grandes
 
 ## 🤝 Contribuir
 

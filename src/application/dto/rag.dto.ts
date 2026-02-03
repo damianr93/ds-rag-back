@@ -9,6 +9,8 @@ export interface ConversationMessage {
 export interface SimilarDocument {
   text: string;
   source: string;
+  sourceUrl?: string;
+  sourceType?: string;
 }
 
 export interface ProcessResult {

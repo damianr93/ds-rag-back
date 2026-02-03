@@ -5,11 +5,15 @@ export interface DocumentVectorRepository {
     text: string;
     embedding: number[];
     source: string;
+    sourceUrl?: string;
+    sourceType?: string;
     chunkIndex: number;
     totalChunks: number;
   }): Promise<void>;
 
   findSimilar(embedding: number[], k: number): Promise<SimilarDocument[]>;
+
+  getAllChunksBySource(source: string): Promise<{ text: string; chunkIndex: number }[]>;
 
   countAll(): Promise<number>;
 

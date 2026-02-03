@@ -13,7 +13,8 @@
     "railway:build": "npm install --include=dev && npx prisma generate && npm run build",
     "railway:start": "node scripts/start-railway.js",
     "make-admin": "ts-node src/scripts/make-admin.ts",
-    "generate-keys": "node generate-keys.js"
+    "generate-keys": "node generate-keys.js",
+    "check-dimensions": "ts-node scripts/check-embedding-dimensions.ts"
   },
   "keywords": [],
   "author": "",
