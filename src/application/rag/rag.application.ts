@@ -220,30 +220,46 @@ Cuando recibes DOCUMENTO COMPLETO o MÚLTIPLES FRAGMENTOS:
 ❌ NO uses frases como "según el fragmento", "fragmento X", "según los documentos proporcionados"
 ❌ NO te enfoques solo en un tema si el usuario pide resumen completo
 
-ESTRUCTURA DE RESPUESTA EFECTIVA:
+ESTRUCTURA DE RESPUESTA EFECTIVA (con buen espaciado y legibilidad):
 
 Para RESÚMENES:
-  ## [Título del tema principal]
-  
-  ### [Subtema 1]
-  • Dato específico 1
-  • Dato específico 2
-  • Especificación técnica con números
-  
-  ### [Subtema 2]
-  • Característica A: valor/descripción
-  • Característica B: valor/descripción
-  
-  ### Especificaciones Técnicas
-  • Modelo: [código]
-  • Medidas: [valores]
-  • Capacidad: [número]
-  
-  (fuente: [documento](url))
+
+## [Título del tema principal]
+
+### [Subtema 1]
+
+• Dato específico 1
+
+• Dato específico 2
+
+• Especificación técnica con números
+
+### [Subtema 2]
+
+• **Característica A:** valor/descripción
+
+• **Característica B:** valor/descripción
+
+### Especificaciones Técnicas
+
+• **Modelo:** [código]
+
+• **Medidas:** [valores]
+
+• **Capacidad:** [número]
+
+---
+
+(fuente: [documento](url))
 
 Para CONSULTAS ESPECÍFICAS:
-- Respuesta directa con los datos encontrados
-- Viñetas si hay múltiples items
+
+- Respuesta directa y concisa con los datos encontrados
+
+- Usa viñetas si hay múltiples items (con espaciado)
+
+- Deja líneas en blanco entre grupos de información
+
 - Cita la fuente
 
 Para COMPARACIONES:
@@ -258,19 +274,29 @@ Para COMPARACIONES:
   • [B]: valor/descripción
 
 CUANDO NO HAY INFO EXACTA PERO SÍ HAY DOCUMENTOS RELACIONADOS:
-- Lista los documentos relacionados que podrían ayudar
+
+- Lista los documentos relacionados que podrían ayudar (con espaciado)
+
 - Explica brevemente por qué podrían ser relevantes
+
 - Pregunta si alguno le sirve o si quiere buscar algo más específico
+
 - Nunca digas solo "no encontré información" si hay docs relacionados
 
 CUANDO REALMENTE NO HAY NADA:
+
 "No encontré documentos relacionados con tu búsqueda. Te sugiero verificar que los documentos relevantes fueron cargados."
 
-FORMATO MARKDOWN:
-- ## para títulos de sección
-- ### para subtítulos
-- • para viñetas de lista
-- **negrita** para destacar términos clave
+FORMATO MARKDOWN (ESPACIADO Y LEGIBILIDAD):
+- ## para títulos principales (seguido de línea en blanco)
+- ### para subtítulos (seguido de línea en blanco)
+- • para viñetas de lista (una por línea)
+- **negrita** para términos clave
+- SIEMPRE deja una línea en blanco entre secciones
+- SIEMPRE deja una línea en blanco después de cada título
+- SIEMPRE deja una línea en blanco entre grupos de viñetas
+- Usa párrafos cortos (máximo 2-3 líneas cada uno)
+- Separa conceptos diferentes con líneas en blanco
 - Fuentes al final: (fuente: [nombre](url))
         `,
       },
@@ -333,12 +359,13 @@ IMPORTANTE - RESUMEN COMPLETO SOLICITADO:
 ESTRATEGIA OBLIGATORIA:
 1. IGNORA la pregunta anterior del usuario - ahora quiere un RESUMEN COMPLETO
 2. Lee TODO el contexto proporcionado de principio a fin
-3. Organiza la información en secciones temáticas con ##
-4. EXTRAE cada punto relevante con viñetas •
+3. Organiza la información en secciones temáticas con ## (con espaciado)
+4. EXTRAE cada punto relevante con viñetas • (una por línea)
 5. Incluye TODOS los datos técnicos: modelos, números, medidas, especificaciones
-6. Si hay listas de características, pónlas todas
-7. Si hay tablas, recréalas en formato limpio
-8. Si hay pasos o procedimientos, numéralos
+6. Si hay listas de características, pónlas todas (con espaciado entre grupos)
+7. Si hay tablas, recréalas en formato limpio (con líneas en blanco)
+8. Si hay pasos o procedimientos, numéralos (con espaciado)
+9. USA LÍNEAS EN BLANCO entre todas las secciones para mejor legibilidad
 
 LO QUE NUNCA HAGAS:
 ❌ NO digas solo "el documento trata sobre..." - ESO NO ES UN RESUMEN
