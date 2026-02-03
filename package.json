@@ -4,9 +4,9 @@
   "description": "RAG System with Cloud Document Sources Integration",
   "main": "dist/app.js",
   "scripts": {
-    "dev": "tsnd --respawn --clear src/app.ts",
+    "dev": "NODE_OPTIONS=--max-old-space-size=8192 tsnd --respawn --clear src/app.ts",
     "build": "rm -rf dist && tsc",
-    "start": "node dist/app.js",
+    "start": "NODE_OPTIONS=--max-old-space-size=8192 node dist/app.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",

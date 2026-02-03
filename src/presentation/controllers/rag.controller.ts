@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { RAGService } from "../../application/services/rag.service";
+import { RAGApplication } from "../../application/rag/rag.application";
 
 
 type AuthenticatedRequest = Request & {
@@ -12,7 +12,7 @@ type AuthenticatedRequest = Request & {
 };
 
 export class RAGController {
-  constructor(public readonly ragService: RAGService) { }
+  constructor(public readonly ragService: RAGApplication) { }
 
   // ✅ Chatbot habilitado para todos los usuarios
   // (Restricción de emails eliminada)
@@ -70,8 +70,8 @@ export class RAGController {
 
 
       const result = await this.ragService.askWithRAG(
-        Number(conversationId),
         question,
+        Number(conversationId),
         authUserId
       );
 
@@ -224,7 +224,7 @@ export class RAGController {
           message: "Debe proporcionar el id de la conversacion a eliminar"
         });
       };
-      const success = await this.ragService.desactiveConversation(conversationId);
+      const success = await this.ragService.deactivateConversation(conversationId);
 
       if (!success) {
         return res.status(400).json({
@@ -305,8 +305,7 @@ export class RAGController {
         }); // //! normalizar y validar ruta (path.normalize) y baseDir permitida
       }
 
-      const authUserId = (req as any).user?.id;
-      const result = await this.ragService.processFile(filePath.trim(), authUserId);
+      const result = await this.ragService.processFile(filePath.trim());
 
       if (result.success) {
         return res.json({

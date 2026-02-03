@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { CustomError } from "../../domain";
-import { AuthService } from "../../application/services/auth.service";
+import { AuthApplication } from "../../application/auth/auth.application";
 import { LoginUserDto, RegisterUserDto } from "../../application/dto/auth.dto";
 
 // Tipo para Request con user
@@ -15,7 +15,7 @@ type AuthenticatedRequest = Request & {
 
 export class AuthController {
   //* DI: mantengo inyectable para testear fácil
-  constructor(public readonly authService: AuthService) {}
+  constructor(public readonly authService: AuthApplication) {}
 
   // Handler centralizado de errores
   private handleError = (error: unknown, res: Response) => {

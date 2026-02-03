@@ -2,12 +2,10 @@ import { PrismaUserRepository } from '../../infrastructure/auth/repositories/pri
 import { BcryptHasher } from '../../infrastructure/auth/providers/bcrypt.hasher';
 import { JwtTokenService } from '../../infrastructure/auth/providers/jwt.token';
 import { AuthApplication } from '../../application/auth/auth.application';
-import { AuthService } from '../../application/services/auth.service';
 import { AuthController } from '../../presentation/controllers/auth.controller';
 import { OAuthController } from '../../presentation/controllers/oauth.controller';
 import { TokenService, PasswordHasher } from '../../domain/shared/ports/security';
 import { RAGApplication } from '../../application/rag/rag.application';
-import { RAGService } from '../../application/services/rag.service';
 import { RAGController } from '../../presentation/controllers/rag.controller';
 import { PrismaConversationRepository } from '../rag/repositories/prisma-conversation.repository';
 import { PostgresDocumentVectorRepository } from '../rag/repositories/postgres-document-vector.repository';
@@ -115,8 +113,7 @@ export class Container {
           c.resolve<TokenService>('TokenService')
         )
       );
-      this.register<AuthService>('AuthService', (c) => new AuthService(c.resolve<AuthApplication>('AuthApplication')));
-      this.register<AuthController>('AuthController', (c) => new AuthController(c.resolve<AuthService>('AuthService')));
+      this.register<AuthController>('AuthController', (c) => new AuthController(c.resolve<AuthApplication>('AuthApplication')));
 
       // Document Sources
       this.register<PrismaDocumentSourceRepository>('DocumentSourceRepository', () => new PrismaDocumentSourceRepository(prisma));
@@ -163,8 +160,7 @@ export class Container {
         )
       );
       
-      this.register<RAGService>('RAGService', (c) => new RAGService(c.resolve<RAGApplication>('RagApplication'), () => closePool()));
-      this.register<RAGController>('RAGController', (c) => new RAGController(c.resolve<RAGService>('RAGService')));
+      this.register<RAGController>('RAGController', (c) => new RAGController(c.resolve<RAGApplication>('RagApplication')));
 
       // Tracked Files - Después de RAG para tener acceso a los repositorios
       this.register<PrismaTrackedFileRepository>('TrackedFileRepository', () => new PrismaTrackedFileRepository(prisma));

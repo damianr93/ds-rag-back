@@ -7,7 +7,7 @@ import { ConversationMessage, ProcessResult } from '../dto/rag.dto';
 import { ConversationRepository, DocumentVectorRepository, ProcessedFileRepository } from '../../domain/rag/ports/repositories';
 import { Chunker, EmbeddingsProvider } from '../../domain/rag/ports/services';
 import { ChatLLM } from '../../domain/shared/ports/llm';
-import { TextExtractorRegistry } from '../../infrastructure/rag/extractors/registry';
+import { isSupportedExtension, TextExtractorRegistry } from '../../infrastructure/rag/extractors/registry';
 import { DocumentSourceRepository } from '../../domain/document-sources/ports/repositories';
 import { CloudStorageProvider } from '../../domain/document-sources/ports/services';
 import { EncryptionService } from '../services/encryption.service';
@@ -141,10 +141,10 @@ EJEMPLOS INCORRECTOS:
     
     const isComparison = lowerQuestion.includes('compar') || lowerQuestion.includes('diferencia') || lowerQuestion.includes('versus') || lowerQuestion.includes('vs');
     
-    let k = 5;
+    let k = 10;
     if (wantsFullDocument) k = 15;
-    else if (isComparison) k = 10;
-    else if (lowerQuestion.length > 100) k = 8;
+    else if (isComparison) k = 12;
+    else if (lowerQuestion.length > 100) k = 10;
     
     const similar = await this.docRepo.findSimilar(embed, k);
 
@@ -257,8 +257,14 @@ Para COMPARACIONES:
   • [A]: valor/descripción
   • [B]: valor/descripción
 
-CUANDO NO HAY INFO:
-"No encontré información sobre [tema específico] en los documentos disponibles. ¿Podrías reformular con otras palabras clave?"
+CUANDO NO HAY INFO EXACTA PERO SÍ HAY DOCUMENTOS RELACIONADOS:
+- Lista los documentos relacionados que podrían ayudar
+- Explica brevemente por qué podrían ser relevantes
+- Pregunta si alguno le sirve o si quiere buscar algo más específico
+- Nunca digas solo "no encontré información" si hay docs relacionados
+
+CUANDO REALMENTE NO HAY NADA:
+"No encontré documentos relacionados con tu búsqueda. Te sugiero verificar que los documentos relevantes fueron cargados."
 
 FORMATO MARKDOWN:
 - ## para títulos de sección
@@ -271,23 +277,48 @@ FORMATO MARKDOWN:
       ...recentHistory,
     ];
 
-    if (context.length < 200) {
+    if (similar.length === 0) {
       messages.push({
         role: 'user',
-        content: `SITUACIÓN: No se encontró información relevante en los documentos disponibles.
+        content: `SITUACIÓN: No hay documentos indexados en el sistema.
 
 PREGUNTA DEL USUARIO: "${question}"
 
 INSTRUCCIONES:
-1. Responde en ESPAÑOL
-2. Di claramente: "No encontré información sobre [tema específico] en los documentos disponibles."
-3. NO inventes información ni uses conocimiento general
-4. Sugiere al usuario:
-   - Reformular con palabras clave diferentes
-   - Especificar más detalles
-   - Verificar si el documento correcto fue cargado`,
+1. Responde en ESPAÑOL, tono amigable y conversacional
+2. Di algo como: "Parece que todavía no hay documentos cargados en el sistema. Si sos administrador, podés agregar documentos desde el panel de sincronización. Si sos usuario, por favor contactá al equipo para que carguen la documentación necesaria."
+3. Sé empático y útil
+4. NO inventes información`,
       });
-    } else {
+    } else if (context.length < 150) {
+      const relatedDocs = similar.slice(0, 5).map(d => {
+        const link = SourceUrlGenerator.formatSourceWithLink(d.source, d.sourceUrl, d.sourceType);
+        const preview = d.text.length > 200 ? d.text.substring(0, 200) + '...' : d.text;
+        return { source: d.source, link, preview };
+      });
+
+      const docsInfo = relatedDocs.map((doc, idx) => 
+        `${idx + 1}. ${doc.link}\n   Vista previa: "${doc.preview}"`
+      ).join('\n\n');
+
+      messages.push({
+        role: 'user',
+        content: `SITUACIÓN: La búsqueda devolvió ${similar.length} documento(s), pero no parecen muy relacionados con "${question}".
+
+DOCUMENTOS QUE LLEGARON A LA BÚSQUEDA:
+${docsInfo}
+
+INSTRUCCIONES PARA RESPONDER (tono conversacional y natural):
+1. Responde en ESPAÑOL, como si fueras un bibliotecario experto y amigable
+2. Inicia con: "No encontré información específica sobre [tema exacto], pero estos son los documentos más cercanos que tengo:"
+3. Lista los documentos con hipervínculos usando formato Markdown
+4. Para cada uno, menciona qué contiene según la vista previa
+5. Pregunta al usuario: "¿Alguno de estos te sirve o se acerca a lo que buscás? Si no, podés probar con otros términos o contarme más sobre qué necesitás."
+6. Si notás algún patrón o tema común en los documentos, mencionalo
+7. NO digas "no encontré nada" cuando hay resultados - siempre mostrar lo que trajiste
+8. NO inventes información - solo comenta sobre las vistas previas reales`,
+      });
+    } else if (similar.length > 0) {
       const instructionType = wantsFullDocument 
         ? `RESUMEN DE DOCUMENTO COMPLETO SOLICITADO`
         : isComparison 
@@ -508,33 +539,39 @@ INSTRUCCIONES GENERALES:
     }
     const credentials = this.encryptionService.decryptJSON<DocumentSourceCredentials>(source.credentials);
 
-    // Obtener metadata del archivo para determinar tipo
     const metadata = await provider.getFileMetadata(credentials, fileId);
-    
-    // Descargar el archivo
-    const fileBuffer = await provider.downloadFile(credentials, fileId);
-    const hash = createHash('md5').update(fileBuffer).digest('hex');
-    
-    // Determinar el nombre y extensión correcta
     let filename = fileName || metadata.name || fileId;
-    
-    // Si es un Google Doc/Sheet/Slide, se exporta como PDF
+
     if (metadata.mimeType.startsWith('application/vnd.google-apps.')) {
-      // Agregar extensión .pdf si no la tiene
       if (!filename.toLowerCase().endsWith('.pdf')) {
         filename = `${filename}.pdf`;
       }
     }
 
-    // ✅ Sanitizar el nombre del archivo para evitar problemas con rutas
+    if (!isSupportedExtension(filename)) {
+      const ext = path.extname(filename).toLowerCase() || '(sin extensión)';
+      return {
+        success: false,
+        message: `Formato no soportado (${ext}). Solo se indexan: PDF, DOCX, DOC, TXT, XLSX.`,
+      };
+    }
+
     const sanitizedFilename = this.sanitizeFilename(filename);
 
-    // Verificar si ya fue procesado
+    if (await this.fileRepo.existsByFilename(sanitizedFilename)) {
+      return {
+        success: false,
+        message: 'Ya existe un archivo con el mismo nombre indexado (posible duplicado en otra carpeta).',
+      };
+    }
+
+    const fileBuffer = await provider.downloadFile(credentials, fileId);
+    const hash = createHash('md5').update(fileBuffer).digest('hex');
+
     if (await this.fileRepo.exists(sanitizedFilename, hash)) {
       return { success: false, message: `El archivo ${filename} ya fue procesado anteriormente` };
     }
 
-    // Guardar temporalmente con nombre sanitizado
     const tempPath = path.join(tmpdir(), `${Date.now()}-${sanitizedFilename}`);
     await fs.writeFile(tempPath, fileBuffer);
 
@@ -544,7 +581,10 @@ INSTRUCCIONES GENERALES:
       const text = await extractor.extract(tempPath);
       
       if (text.trim().length === 0) {
-        return { success: false, message: `El archivo ${filename} no contiene texto extraíble` };
+        return {
+          success: false,
+          message: `El archivo no contiene texto extraíble (puede ser un PDF escaneado o solo imágenes). Solo se indexan documentos con texto seleccionable.`,
+        };
       }
 
       const chunks = this.chunker.chunk(text);
@@ -565,7 +605,20 @@ INSTRUCCIONES GENERALES:
         index++;
       }
 
-      await this.fileRepo.insert(sanitizedFilename, hash, chunks.length); // ✅ Usar nombre sanitizado
+      try {
+        await this.fileRepo.insert(sanitizedFilename, hash, chunks.length);
+      } catch (err: unknown) {
+        const isUniqueViolation =
+          err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === 'P2002';
+        if (isUniqueViolation) {
+          await this.docRepo.deleteBySource(sanitizedFilename);
+          return {
+            success: false,
+            message: 'Ya existe un archivo con el mismo nombre indexado (posible duplicado en otra carpeta).',
+          };
+        }
+        throw err;
+      }
       return { success: true, message: `Archivo ${filename} procesado exitosamente`, chunksCount: chunks.length };
     } finally {
       // Limpiar archivo temporal

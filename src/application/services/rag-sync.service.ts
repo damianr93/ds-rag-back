@@ -2,6 +2,7 @@ import { TrackedFileRepository } from '../../domain/tracked-files/ports/reposito
 import { DocumentSourceRepository } from '../../domain/document-sources/ports/repositories';
 import { RAGApplication } from '../rag/rag.application';
 import { DocumentSourcesApplication } from '../document-sources/document-sources.application';
+import { isSupportedExtension } from '../../infrastructure/rag/extractors/registry';
 
 export interface SyncLog {
   timestamp: Date;
@@ -18,9 +19,12 @@ export interface SyncResult {
   logs: SyncLog[];
 }
 
+const MAX_FILES_PER_SYNC = 25;
+
 export class RagSyncService {
   private logs: SyncLog[] = [];
   private isRunning = false;
+  private filesProcessedThisRun = 0;
 
   constructor(
     private readonly trackedFileRepository: TrackedFileRepository,
@@ -36,15 +40,16 @@ export class RagSyncService {
 
     this.isRunning = true;
     this.logs = [];
+    this.filesProcessedThisRun = 0;
     let processedCount = 0;
     let errorCount = 0;
 
     try {
-      this.addLog('info', 'Iniciando sincronización de archivos...');
+      this.addLog('info', `Iniciando sincronización (máx. ${MAX_FILES_PER_SYNC} archivos por ejecución)...`);
 
-      // Obtener archivos pending
-      const pendingFiles = await this.trackedFileRepository.findPendingFiles(50);
-      
+      const PENDING_BATCH_SIZE = 12;
+      const pendingFiles = await this.trackedFileRepository.findPendingFiles(PENDING_BATCH_SIZE);
+
       if (pendingFiles.length === 0) {
         this.addLog('info', 'No hay archivos pendientes para procesar');
         return {
@@ -57,21 +62,25 @@ export class RagSyncService {
 
       this.addLog('info', `Encontrados ${pendingFiles.length} archivos para procesar`);
 
-      // Procesar cada archivo
       for (const file of pendingFiles) {
+        if (this.filesProcessedThisRun >= MAX_FILES_PER_SYNC) {
+          this.addLog(
+            'warning',
+            `Límite de ${MAX_FILES_PER_SYNC} archivos por ejecución alcanzado. Ejecutá el sync de nuevo para continuar.`
+          );
+          break;
+        }
+
         try {
-          // Validar que el usuario tenga acceso a la fuente
           const source = await this.documentSourceRepository.findById(file.sourceId);
           if (!source || source.userId !== userId) {
             this.addLog('warning', `Archivo ${file.fileName} pertenece a otra fuente, omitiendo`, file.fileId, file.fileName);
             continue;
           }
 
-          // Si es una carpeta, procesar todos los archivos dentro
           if (file.isFolder) {
             await this.processFolderFiles(file, source, userId);
           } else {
-            // Procesar archivo individual
             await this.processFile(file, source, userId);
           }
 
@@ -81,17 +90,22 @@ export class RagSyncService {
           errorCount++;
           const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
           this.addLog('error', `✗ Error en ${file.fileName}: ${errorMessage}`, file.fileId, file.fileName);
-          
+
           const trackedFile = await this.trackedFileRepository.findById(file.id);
-          if (trackedFile && !trackedFile.lastProcessedAt) {
+          const isSkipError =
+            errorMessage.includes('Formato no soportado') ||
+            errorMessage.includes('no contiene texto extraíble') ||
+            errorMessage.includes('Ya existe un archivo con el mismo nombre') ||
+            errorMessage.includes('ya fue procesado') ||
+            errorMessage.includes('Unique constraint failed');
+
+          if (trackedFile && isSkipError) {
+            await this.trackedFileRepository.updateStatus(file.id, 'error', errorMessage);
+          } else if (trackedFile && !trackedFile.lastProcessedAt) {
             await this.trackedFileRepository.delete(file.id);
             this.addLog('info', `Archivo ${file.fileName} removido del tracking debido a error`, file.fileId, file.fileName);
           } else if (trackedFile) {
-            await this.trackedFileRepository.updateStatus(
-              file.id,
-              'error',
-              errorMessage
-            );
+            await this.trackedFileRepository.updateStatus(file.id, 'error', errorMessage);
           }
         }
       }
@@ -120,6 +134,9 @@ export class RagSyncService {
   }
 
   private async processFile(file: any, source: any, userId: number): Promise<void> {
+    if (this.filesProcessedThisRun >= MAX_FILES_PER_SYNC) return;
+
+    this.filesProcessedThisRun++;
     this.addLog('info', `Descargando ${file.fileName}...`, file.fileId, file.fileName);
 
     // Actualizar estado a processing
@@ -144,6 +161,8 @@ export class RagSyncService {
   }
 
   private async processFolderFiles(folder: any, source: any, userId: number): Promise<void> {
+    if (this.filesProcessedThisRun >= MAX_FILES_PER_SYNC) return;
+
     this.addLog('info', `Procesando carpeta ${folder.fileName}...`, folder.fileId, folder.fileName);
 
     if (!folder.includeChildren) {
@@ -152,10 +171,11 @@ export class RagSyncService {
     }
 
     const files = await this.documentSourcesApp.listFiles(source.id, userId, folder.fileId);
-    
     this.addLog('info', `Encontrados ${files.length} archivos en ${folder.fileName}`, folder.fileId, folder.fileName);
 
     for (const file of files) {
+      if (this.filesProcessedThisRun >= MAX_FILES_PER_SYNC) break;
+
       try {
         const existingTracked = await this.trackedFileRepository.findByFileId(source.id, file.id);
         
@@ -179,9 +199,26 @@ export class RagSyncService {
             await this.processFolderFiles(subfolderTracked, source, userId);
           }
         } else {
-          let newTrackedCreated = false;
+          if (!isSupportedExtension(file.name)) {
+            this.addLog(
+              'warning',
+              `Omitiendo ${file.name}: formato no soportado. Solo se indexan PDF, DOCX, DOC, TXT, XLSX.`,
+              file.id,
+              file.name
+            );
+            const existing = await this.trackedFileRepository.findByFileId(source.id, file.id);
+            if (existing && (existing.status === 'pending' || existing.status === 'error')) {
+              await this.trackedFileRepository.updateStatus(
+                existing.id,
+                'error',
+                'Formato no soportado. Solo se indexan: PDF, DOCX, DOC, TXT, XLSX.'
+              );
+            }
+            continue;
+          }
+
           let trackedFileId: number | null = null;
-          
+
           try {
             if (!existingTracked) {
               const newTracked = await this.trackedFileRepository.create({
@@ -192,8 +229,7 @@ export class RagSyncService {
                 isFolder: false,
                 lastModified: file.modifiedTime || new Date(),
               });
-              
-              newTrackedCreated = true;
+
               trackedFileId = newTracked.id;
               await this.processFile(newTracked, source, userId);
             } else if (existingTracked.status === 'pending' || existingTracked.status === 'error') {
@@ -222,22 +258,24 @@ export class RagSyncService {
     await this.trackedFileRepository.updateProcessed(folder.id, 0);
   }
 
+  private static readonly MAX_LOGS = 300;
+
   private addLog(
     level: SyncLog['level'],
     message: string,
     fileId?: string,
     fileName?: string
   ): void {
-    const log: SyncLog = {
+    this.logs.push({
       timestamp: new Date(),
       level,
       message,
       fileId,
       fileName,
-    };
-    this.logs.push(log);
-    
-    // Solo loguear errores en consola
+    });
+    if (this.logs.length > RagSyncService.MAX_LOGS) {
+      this.logs = this.logs.slice(-RagSyncService.MAX_LOGS);
+    }
     if (level === 'error') {
       console.error(`[RAG SYNC] ${message}`);
     }

@@ -12,6 +12,13 @@ export class PrismaProcessedFileRepository implements ProcessedFileRepository {
     return file !== null;
   }
 
+  async existsByFilename(filename: string): Promise<boolean> {
+    const file = await prisma.processedFile.findFirst({
+      where: { filename }
+    });
+    return file !== null;
+  }
+
   async insert(filename: string, fileHash: string, chunksCount: number): Promise<void> {
     await prisma.processedFile.create({
       data: {

@@ -327,6 +327,20 @@ npm install
 npm run build
 ```
 
+### Sincronización RAG: "Heap out of memory" o proceso muy lento
+
+La sincronización procesa archivos en lotes (12 por ejecución) y limita los logs en memoria para evitar OOM. Si tienes muchas carpetas o PDFs muy grandes:
+
+- **Aumentar memoria de Node** (desarrollo local):
+  ```bash
+  NODE_OPTIONS=--max-old-space-size=4096 npm run dev
+  ```
+  O para una sola ejecución del servidor: `export NODE_OPTIONS=--max-old-space-size=4096` antes de `npm start`.
+
+- **Formatos soportados:** Solo se indexan PDF, DOCX, DOC, TXT y XLSX. Imágenes (.jpg, .png) y otros formatos se omiten con un aviso.
+- **PDFs sin texto:** Los PDFs escaneados (solo imagen) no contienen texto extraíble; se marcan como error y no se reintentan.
+- **Mismo nombre en varias carpetas:** Si dos archivos tienen el mismo nombre, solo se indexa el primero; el otro queda con mensaje "Ya existe un archivo con el mismo nombre indexado".
+
 ## 📝 Crear Usuario Admin
 
 ```bash

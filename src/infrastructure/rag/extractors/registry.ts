@@ -6,6 +6,13 @@ import { DocTextExtractor } from './doc.extractor';
 import { TxtTextExtractor } from './txt.extractor';
 import { ExcelTextExtractor } from './excel.extractor';
 
+export const SUPPORTED_EXTENSIONS = ['.pdf', '.docx', '.doc', '.txt', '.xlsx'] as const;
+
+export function isSupportedExtension(filename: string): boolean {
+  const ext = path.extname(filename).toLowerCase();
+  return (SUPPORTED_EXTENSIONS as readonly string[]).includes(ext);
+}
+
 export class TextExtractorRegistry {
   private readonly extractors: TextExtractor[] = [
     new PdfTextExtractor(),

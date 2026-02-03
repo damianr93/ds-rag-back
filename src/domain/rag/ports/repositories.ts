@@ -43,6 +43,8 @@ export interface ConversationRepository {
 export interface ProcessedFileRepository {
   exists(filename: string, fileHash: string): Promise<boolean>;
 
+  existsByFilename(filename: string): Promise<boolean>;
+
   insert(filename: string, fileHash: string, chunksCount: number): Promise<void>;
 
   listFiles(): Promise<{ filename: string; chunks_count: number; processed_at: Date }[]>;
